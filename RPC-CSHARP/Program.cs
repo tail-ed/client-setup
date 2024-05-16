@@ -1,24 +1,63 @@
 using System;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 
 namespace Tailed.ProgrammerGames.TicTacToe
 {
     public class ClientRPC
     {
-        public static void RPCSendMessage(string method, object args)
+        private static TcpClient client;
+        private static NetworkStream stream;
+
+        public static async Task ConnectToServerAsync(string hostname, int port)
+        {
+            try
+            {
+                Console.WriteLine("Launching");
+                client = new TcpClient();
+                await client.ConnectAsync(hostname, port);
+                stream = client.GetStream();
+                ListenForResponsesAsync();
+            }
+            catch(Exception ex)
+            {
+                Console.WriteLine("Failed to connect :" + ex.Message);
+            }
+        }
+
+        private static async Task ListenForResponsesAsync()
+        {
+            try
+            {
+                byte[] buffer = new byte[1024];
+                while(true)
+                {
+                    var bytesReceived = await stream.ReadAsync(buffer, 0, buffer.Length);
+                    if(bytesReceived > 0)
+                    {
+                        string response = Encoding.UTF8.GetString(buffer, 0, buffer.Length);
+                        Console.WriteLine("SERVER RESPONSE : " + response);
+                    }
+                    Console.WriteLine("No response...");
+                }
+            }
+            catch(Exception e)
+            {
+                Console.WriteLine("Error receiving data from server : " + e.Message);
+                Disconect();
+            }
+        }
+
+        public static void RPCSendMessage(string method, object args = null)
         {
             
                 //INPUT VALIDATION - CHECK IF NULL OR EMPTY
                 if(string.IsNullOrEmpty(method))
                 {
                     throw new ArgumentException("Method name cannot be null or empty --> ", nameof(method));
-                }
-
-                if(args == null)
-                {
-                    throw new ArgumentException("Object cannot be null or empty --> ", nameof(args));
                 }
 
                 //CREATE JSON-RPC MESSAGE
@@ -26,40 +65,29 @@ namespace Tailed.ProgrammerGames.TicTacToe
 
                 //CONVERT MESSAGE TO JSON
                 string jsonMessage = JsonConvert.SerializeObject(rpcMessage);
-                
-                //SEND MESSAGE AND RECEIVE RESPONSE
-                string response = SendAndReceiveMessage(jsonMessage);
-
-                //SERVER FEEDBACK
-                Console.WriteLine("SERVER RESPONSE : " + response);
-            
-
+                Send(jsonMessage);
         }
 
-        public static void RPCSendMessage(string method)
+        private static void Send(string jsonMessage)
         {
-            
-                //INPUT VALIDATION - CHECK IF NULL OR EMPTY
-                if(string.IsNullOrEmpty(method))
-                {
-                    throw new ArgumentException("Method name cannot be null or empty --> ", nameof(method));
-                }
+            if(stream == null || !client.Connected)
+            {
+                Console.WriteLine("Failed : Not connected to server");
+                return;
+            }
 
-                //CREATE JSON-RPC MESSAGE
-                var rpcMessage = new { method = method};
-
-                //CONVERT MESSAGE TO JSON
-                string jsonMessage = JsonConvert.SerializeObject(rpcMessage);
-                
-                //SEND MESSAGE AND RECEIVE RESPONSE
-                string response = SendAndReceiveMessage(jsonMessage);
-
-                //SERVER FEEDBACK
-                Console.WriteLine("SERVER RESPONSE : " + response);
-            
-
+            byte[] data = Encoding.UTF8.GetBytes(jsonMessage);
+            stream.Write(data, 0, data.Length);
         }
 
+        private static void Disconect()
+        {
+            stream?.Close();
+            client?.Close();
+        }
+
+
+        /*
         private static string SendAndReceiveMessage(string jsonMessage)
         {
             //CONNECTION TO SERVER
@@ -89,29 +117,30 @@ namespace Tailed.ProgrammerGames.TicTacToe
             
             return response.ToString();
         }
+        */
 
 
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
-            try{
+            //CONNECTION TO SERVER 
+            await ConnectToServerAsync("localhost",25001);
+            
+            //FOR COMMANDS LIST, TYPE :
+            //RPCSendMessage("Help");
 
-                //FOR COMMANDS LIST, TYPE :
-                RPCSendMessage("Help");
-
+            //INSERT CODE HERE :
+                //RPCSendMessage("Help");
+                //RPCSendMessage("GetBoard");
                 RPCSendMessage("PutToken", new {x = 2, y = 2});
-                RPCSendMessage("GetBoard"); // --> Doesn't return a valid value
-                RPCSendMessage("CheckForVictory");
+                RPCSendMessage("PutToken", new {x = 1, y = 2});
 
                 //ERRORS HANDLED IN RPC :
                 //RPCSendMessage("");
                 //RPCSendMessage("PutToken",null);
                 //RPCSendMessage("PutToken", new { obj = new System.IO.MemoryStream() }); //NON CONVERTIBLE EN JSON
-
-            }
-            catch(Exception e)
-            {
-                Console.Error.Write("MAIN ERROR : " + e.ToString());
-            }
+            
+            //
+            await Task.Delay(-1);
         }
     }
 }
