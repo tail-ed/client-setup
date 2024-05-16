@@ -30,8 +30,32 @@ namespace Tailed.ProgrammerGames.TicTacToe
                 //SEND MESSAGE AND RECEIVE RESPONSE
                 string response = SendAndReceiveMessage(jsonMessage);
 
-                //DEBUG
-                Console.WriteLine("RECEIVED : " + response);
+                //SERVER FEEDBACK
+                Console.WriteLine("SERVER RESPONSE : " + response);
+            
+
+        }
+
+        public static void RPCSendMessage(string method)
+        {
+            
+                //INPUT VALIDATION - CHECK IF NULL OR EMPTY
+                if(string.IsNullOrEmpty(method))
+                {
+                    throw new ArgumentException("Method name cannot be null or empty --> ", nameof(method));
+                }
+
+                //CREATE JSON-RPC MESSAGE
+                var rpcMessage = new { method = method};
+
+                //CONVERT MESSAGE TO JSON
+                string jsonMessage = JsonConvert.SerializeObject(rpcMessage);
+                
+                //SEND MESSAGE AND RECEIVE RESPONSE
+                string response = SendAndReceiveMessage(jsonMessage);
+
+                //SERVER FEEDBACK
+                Console.WriteLine("SERVER RESPONSE : " + response);
             
 
         }
@@ -69,30 +93,20 @@ namespace Tailed.ProgrammerGames.TicTacToe
 
         public static void Main(string[] args)
         {
-            //OBJECTIF : LE USER CODE DANS LE MAIN, EN UTILISANT 
-            //CLIENTRPC COMME PACKAGE
-            //LE PROGRAM.CS DOIT SEULEMENT CONTENIR LE MAIN()
-
-            //ERREURS POSSIBLE : 
-            
-            //RPCSendMessage("PutTok",2); --> does nothing
-            //RPCSendMessage("PutToken", 2); --> does nothing
-            //AJOUTER UNE VALIDATION DANS UNITY DIRECTEMENT POUR INFORMER
-            //L'UTILISATEUR QU'UNE ERREUR EST SURVENUE LORS DE L'APPEL DE FONCTION
-
-
             try{
-                //THROW ERROR :
-                RPCSendMessage("",1);
-                RPCSendMessage("PutToken",null);
 
-                //EXEMPLE FONCTIONNEL
-                RPCSendMessage("PutToken", new { x = 0, y = 0});
-                //RPCSendMessage("PutToken", new { x = 2, y = 0}); //BOT TURN
-                RPCSendMessage("PutToken", new { x = 1, y = 1});
-                //RPCSendMessage("PutToken", new { x = 2, y = 1}); //BOT TURN
-                RPCSendMessage("PutToken", new { x = 2, y = 2});
-                RPCSendMessage("PutToken", new { obj = new System.IO.MemoryStream() }); //NON CONVERTIBLE EN JSON
+                //FOR COMMANDS LIST, TYPE :
+                RPCSendMessage("Help");
+
+                RPCSendMessage("PutToken", new {x = 2, y = 2});
+                RPCSendMessage("GetBoard"); // --> Doesn't return a valid value
+                RPCSendMessage("CheckForVictory");
+
+                //ERRORS HANDLED IN RPC :
+                //RPCSendMessage("");
+                //RPCSendMessage("PutToken",null);
+                //RPCSendMessage("PutToken", new { obj = new System.IO.MemoryStream() }); //NON CONVERTIBLE EN JSON
+
             }
             catch(Exception e)
             {
