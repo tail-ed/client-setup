@@ -16,7 +16,7 @@ namespace Tailed.ProgrammerGames.TicTacToe
         {
             try
             {
-                Console.WriteLine("Launching");
+                Console.WriteLine("Launching...");
                 client = new TcpClient();
                 await client.ConnectAsync(hostname, port);
                 stream = client.GetStream();
@@ -38,10 +38,13 @@ namespace Tailed.ProgrammerGames.TicTacToe
                     var bytesReceived = await stream.ReadAsync(buffer, 0, buffer.Length);
                     if(bytesReceived > 0)
                     {
-                        string response = Encoding.UTF8.GetString(buffer, 0, buffer.Length);
+                        string response = Encoding.UTF8.GetString(buffer, 0, bytesReceived);
                         Console.WriteLine("SERVER RESPONSE : " + response);
                     }
-                    Console.WriteLine("No response...");
+                    else 
+                    {
+                        throw new Exception("Server closed the connection.");
+                    }
                 }
             }
             catch(Exception e)
@@ -129,10 +132,10 @@ namespace Tailed.ProgrammerGames.TicTacToe
             //RPCSendMessage("Help");
 
             //INSERT CODE HERE :
-                //RPCSendMessage("Help");
+                RPCSendMessage("Help");
                 //RPCSendMessage("GetBoard");
-                RPCSendMessage("PutToken", new {x = 2, y = 2});
-                RPCSendMessage("PutToken", new {x = 1, y = 2});
+                //RPCSendMessage("PutToken", new {x = 2, y = 2});
+                //RPCSendMessage("PutToken", new {x = 1, y = 2});
 
                 //ERRORS HANDLED IN RPC :
                 //RPCSendMessage("");
