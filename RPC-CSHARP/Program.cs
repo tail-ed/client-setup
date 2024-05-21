@@ -56,7 +56,8 @@ namespace Tailed.ProgrammerGames.TicTacToe
 
         public static void RPCSendMessage(string method, object args = null)
         {
-            
+            try
+            {
                 //INPUT VALIDATION - CHECK IF NULL OR EMPTY
                 if(string.IsNullOrEmpty(method))
                 {
@@ -69,6 +70,12 @@ namespace Tailed.ProgrammerGames.TicTacToe
                 //CONVERT MESSAGE TO JSON
                 string jsonMessage = JsonConvert.SerializeObject(rpcMessage);
                 Send(jsonMessage);
+
+            }
+            catch(Exception e)
+            {
+                Console.Error.WriteLine("RPC MESSAGE ERROR : " + e.Message);
+            }
         }
 
         private static void Send(string jsonMessage)
@@ -89,40 +96,6 @@ namespace Tailed.ProgrammerGames.TicTacToe
             client?.Close();
         }
 
-
-        /*
-        private static string SendAndReceiveMessage(string jsonMessage)
-        {
-            //CONNECTION TO SERVER
-            using var client = new TcpClient("localhost", 25001);
-            using var stream = client.GetStream();
-
-            //SEND JSON MESSAGE
-            byte[] data = Encoding.UTF8.GetBytes(jsonMessage);
-            stream.Write(data, 0, data.Length);
-
-            //RECEIVE RESPONSE
-            return ReceiveResponse(stream);
-        }
-
-        private static string ReceiveResponse(NetworkStream stream)
-        {
-            //RECEIVE RESPONSE
-            byte[] buffer = new byte[1024];
-            StringBuilder response = new();
-            
-            int bytesRead;
-            do
-            {
-                bytesRead = stream.Read(buffer, 0, buffer.Length);
-                response.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead));
-            }while(bytesRead == buffer.Length);
-            
-            return response.ToString();
-        }
-        */
-
-
         public static async Task Main(string[] args)
         {
             //CONNECTION TO SERVER 
@@ -132,10 +105,18 @@ namespace Tailed.ProgrammerGames.TicTacToe
             //RPCSendMessage("Help");
 
             //INSERT CODE HERE :
-                RPCSendMessage("Help");
-                //RPCSendMessage("GetBoard");
-                //RPCSendMessage("PutToken", new {x = 2, y = 2});
+                //RPCSendMessage("Help");
+                //RPCSendMessage("PlayerTurn");
+
+                //RPCSendMessage("PutToken", new {x = 4, y = 2});
+                //RPCSendMessage("PutToken", new {x = false, y = true});
+
+                //RPCSendMessage("PutToken", new {x = 'W', y = 'S'});
+                RPCSendMessage("PutToken", new {x = 2, y = 2});
                 //RPCSendMessage("PutToken", new {x = 1, y = 2});
+
+                //RPCSendMessage("PutToken", new {x = 1, y = 2});
+                //RPCSendMessage("GetBoard");
 
                 //ERRORS HANDLED IN RPC :
                 //RPCSendMessage("");
