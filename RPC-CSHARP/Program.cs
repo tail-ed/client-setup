@@ -1,10 +1,5 @@
-using System;
-using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Server.HttpSys;
-using Microsoft.Extensions.Http;
 using Newtonsoft.Json;
 
 namespace Tailed.ProgrammerGames.TicTacToe
@@ -16,8 +11,8 @@ namespace Tailed.ProgrammerGames.TicTacToe
 
     public class ClientRPC
     {
-        private static TcpClient client;
-        private static NetworkStream stream;
+        private static TcpClient? client;
+        private static NetworkStream? stream;
         private static IGameManager gameManager = new GameManager();
 
         public static async Task ConnectToServerAsync(string hostname, int port)
@@ -28,7 +23,7 @@ namespace Tailed.ProgrammerGames.TicTacToe
                 client = new TcpClient();
                 await client.ConnectAsync(hostname, port);
                 stream = client.GetStream();
-                ListenForResponsesAsync();
+                _ = ListenForResponsesAsync();
             }
             catch(Exception ex)
             {
@@ -42,6 +37,7 @@ namespace Tailed.ProgrammerGames.TicTacToe
             StringBuilder responseBuilder = new();
             while(true)
             {
+                if(stream == null) throw new ArgumentNullException(nameof(stream));
                 try
                 {
                     var bytesReceived = await stream.ReadAsync(buffer, 0, buffer.Length);
@@ -82,11 +78,13 @@ namespace Tailed.ProgrammerGames.TicTacToe
             try
             {
                 var message = JsonConvert.DeserializeObject<dynamic>(jsonMessage);
+                if(message == null) return;
                 string method = message.Method;
                 var args = message.Args;
 
                 switch(method)
                 {
+                    //IMPLEMENT METHODS HERE
                     case "Event":
                         if(message.Args["MethodName"] == "ServerClosing")
                         {
@@ -98,9 +96,9 @@ namespace Tailed.ProgrammerGames.TicTacToe
                             Console.WriteLine($"[Event]\n{args}\n");
                         }
                         break;
-                    case "CommandList":
+                    case "Help":
                         args = message.Args;
-                        Console.WriteLine($"[CommandList]\n{args}\n");
+                        Console.WriteLine($"[Help]\n{args}\n");
                         break;
                     default:
                         gameManager.ProcessRPCMessage(jsonMessage);
@@ -113,7 +111,7 @@ namespace Tailed.ProgrammerGames.TicTacToe
 
         }
 
-        public static void RPCSendMessage(string method, object args = null)
+        public static void RPCSendMessage(string method, object? args = null)
         {
             try
             {
@@ -139,18 +137,21 @@ namespace Tailed.ProgrammerGames.TicTacToe
 
         private static void Send(string jsonMessage)
         {
+            if(client == null) return;
             if(stream == null || !client.Connected)
             {
                 Console.WriteLine("Failed : Not connected to server");
                 return;
             }
 
+            //IF CONNECTED TO SERVER -> SEND REQUEST
             byte[] data = Encoding.UTF8.GetBytes(jsonMessage);
             stream.Write(data, 0, data.Length);
         }
 
         private static void Disconnect()
         {
+            //DISCONNECT FROM SERVER && CLOSE APP
             stream?.Close();
             client?.Close();
             Environment.Exit(1);
@@ -168,18 +169,17 @@ namespace Tailed.ProgrammerGames.TicTacToe
         }
     }
 
+    //GAMEPLAY EXEMPLE : (BASIC)
     public class GameManager : IGameManager
     {
         private static int[,] gameBoard = new int[3,3];
-        //EXEMPLE
-        private static Random random = new(); //DELETE THIS
-        private static int lastX = -1;
-        private static int lastY = -1;
-        //
+        private static readonly Random random = new();
 
         public void ProcessRPCMessage(string json)
         {
             var message = JsonConvert.DeserializeObject<dynamic>(json);
+            if(message == null) return;
+
             string method = message.Method;
             var args = message.Args;
 
@@ -187,9 +187,6 @@ namespace Tailed.ProgrammerGames.TicTacToe
             {
                 case "Action":
                     HandleAction(args);
-                    break;
-                case "Data":
-                    HandleData(args);
                     break;
                 default:
                     Console.WriteLine($"Unhandled message type : {method}");
@@ -202,45 +199,23 @@ namespace Tailed.ProgrammerGames.TicTacToe
             //DISPLAY ACTION TEXT
             Console.WriteLine($"[Action]\n{args}\n");
 
-            //ACTION LOGIC HERE
-            int x, y;
+            //GET GAME ARRAY 
+            string jsonArray = args.Array;
+            gameBoard = JsonConvert.DeserializeObject<int[,]>(jsonArray);
 
-            do{
+            //ACTION LOGIC HERE
+            //EXEMPLE : PICK A RANDOM AVAILABLE SPOT
+            int x, y;
+            do
+            {
                 x = random.Next(0, 3);
                 y = random.Next(0, 3);
-            }while(x == lastX && y == lastY);
-
-            lastX= x;
-            lastY= y;
+            }
+            while(gameBoard[x,y] != 0);
 
             //SEND ACTION HERE
             ClientRPC.RPCSendMessage("PutToken", new { x, y});
             //
-
-        }
-
-        private static void HandleData(dynamic args)
-        {
-            //DISPLAY DATA TEXT
-            Console.WriteLine($"[Data]\n{args}\n");
-
-            //INSERT DATA HANDLING HERE
-            
-            //EXEMPLE
-            string jsonArray = args.Array;
-            int[][] tempArray = JsonConvert.DeserializeObject<int[][]>(jsonArray);
-
-            for(int i = 0; i < 3; i++)
-            {
-                for(int j = 0; j < 3; j++)
-                {
-                    gameBoard[i, j] = tempArray[i][j];
-                }
-            }
-            
-            //DEBUG
-            string finalArray = JsonConvert.SerializeObject(gameBoard);
-            Console.WriteLine($"\n[ConvertedData]\n{finalArray}\n");
         }
     }
 }
