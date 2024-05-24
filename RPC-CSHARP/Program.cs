@@ -1,6 +1,10 @@
+using System;
 using System.Net.Sockets;
 using System.Text;
+using System.IO;
 using Newtonsoft.Json;
+using System.Numerics;
+using System.Security.Cryptography.X509Certificates;
 
 namespace Tailed.ProgrammerGames.TicTacToe
 {
@@ -194,6 +198,10 @@ namespace Tailed.ProgrammerGames.TicTacToe
             }
         }
 
+            private const int Empty = 0; //Empty space
+            private const int Player_X = 1; //Client Token
+            private const int Bot_O = 2; //Bot Token
+
         private static void HandleAction(dynamic args)
         {
             //DISPLAY ACTION TEXT
@@ -205,17 +213,189 @@ namespace Tailed.ProgrammerGames.TicTacToe
 
             //ACTION LOGIC HERE
             //EXEMPLE : PICK A RANDOM AVAILABLE SPOT
-            int x, y;
-            do
-            {
-                x = random.Next(0, 3);
-                y = random.Next(0, 3);
-            }
-            while(gameBoard[x,y] != 0);
+            float x,y;
 
+            x = GetBestMove(gameBoard).X;
+            y = GetBestMove(gameBoard).Y;
+            
+
+            
             //SEND ACTION HERE
-            ClientRPC.RPCSendMessage("PutToken", new { x, y});
+            ClientRPC.RPCSendMessage("PutToken", new { x , y});
             //
         }
+        public static int MiniMax(int[,] board, int depth, bool isMaximizingPlayer, int alpha, int beta)
+        {
+            int score = EvaluateBoard(board);
+            if (score != 0 || depth == 0) //if a position as a score
+            {
+                return score;
+            }
+
+            if (isMaximizingPlayer) //player turn
+            {
+                int bestscore = int.MinValue;
+                for (int i = 0; i < board.GetLength(0); i++)
+                {
+                    for (int j = 0; j < board.GetLength(1); j++) //Get every cell of the board
+                    {
+                        if (board[i, j] == Empty)
+                        {
+                            board[i, j] = Player_X; // put a temporary token
+                            int currentScore = MiniMax(board,depth-1, false, alpha, beta); //check the score of all possible position with the temporary token
+                            board[i, j] = Empty; // delete the temporary token
+                            if (currentScore > bestscore)
+                            {
+                                bestscore = currentScore;
+                            }
+
+                            if (currentScore > alpha)
+                            {
+                                alpha = currentScore;
+                            }
+
+                            if (beta <= alpha)
+                            {
+                                break;
+                            }
+                        }
+                    }
+                }
+                return bestscore;
+            }
+            else // bot turn
+            {
+            int bestscore = int.MaxValue;
+            for (int i = 0; i < board.GetLength(0); i++)
+            {
+                for (int j = 0; j < board.GetLength(1); j++) // Get every cell of the board
+                {
+                    if (board[i, j] == Empty)
+                    {
+                        board[i, j] = Bot_O; // put a temporary token
+                        int currentScore = MiniMax(board,depth-1, true, alpha, beta); //check the score of all possible position with the temporary token
+                        board[i, j] = Empty; // delete the temporary token
+
+                        if (currentScore < bestscore){
+                            bestscore = currentScore;
+                        }
+
+                        if (beta < currentScore){
+                            alpha = currentScore;
+                        }
+
+                        if (beta <= alpha)
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            return bestscore;
+        }
+        }
+        
+        public static int EvaluateBoard(int[,] board)
+        {
+            int score = 0; //Determine the spot with the highest score (highest score == priority to place a Token)
+            //Check Rows
+            for (int i = 0; i < board.GetLength(0); i++)
+            {
+                for (int j = 0; j < board.GetLength(1); j++)
+                {
+                    score += EvaluateLine(board[i, j], board[i, j], board[i, j]); // Check if the player can win in a rows
+                }
+            }
+
+            //Check columns
+            for (int i = 0; i < board.GetLength(0); i++)
+            {
+                for (int j = 0; j < board.GetLength(1); j++)
+                {
+                    score += EvaluateLine(board[i, j], board[i, j], board[i, j]); // Check if the player can win in a columns
+                }
+            }
+
+            //Check Diagonal
+            score += EvaluateLine(board[0, 0], board[1, 1], board[2, 2]); // Check if the player can win on a diagonal
+            score += EvaluateLine(board[0, 2], board[1, 1], board[2, 0]); // Check if the player can win on a diagonal
+
+            return score;
+        }
+        public static int EvaluateLine(int cell1, int cell2, int cell3)
+        {
+            int score = 0;
+            if (cell1 == Player_X) { score = 1; } // + 1 score (priority higher)
+            else if (cell1 == Bot_O) { score = -1; } // - 1 score (priority lower)
+
+            if (cell2 == Player_X) { score *= 10; } // * 10 score ( Priority ++ higher (player can win)) 
+            else if (cell2 == Bot_O) { score *= -10; }// * -10 score (Priority lower (no danger of losing))
+
+            if (cell3 == Player_X)
+            {
+                if (score > 0) // if X
+                {
+                    score *= 10;
+                }
+                else if (score < 0) // if 0
+                {
+                    score = 0; //Block line for X
+                }
+                else //Empty
+                {
+                    score = 1;
+                }
+            }
+            else if (cell3 == Bot_O)
+            {
+                if (score < 0) // if 0
+                {
+                    score *= 10;
+                }
+                else if (score > 1) // if X
+                {
+                    score = 0; //Block line for 0
+                }
+                else //Empty
+                {
+                    score = 1;
+                }
+            }
+            return score;
+        }
+        public static Vector2 GetBestMove(int[,] board)
+        {
+            int bestScore = int.MinValue;
+            Vector2 bestMove = new Vector2(0,0);
+
+            for (int i=0; i< board.GetLength(0); i++)
+            {
+                for (int j=0; j< board.GetLength(1); j++)// Get every cell of the board
+                {
+                    if (board[i, j] == Empty)
+                    {
+                        board[i, j] = Player_X; // put a temporary token
+
+                        int tempScore = EvaluateBoard(board); //Check the board if it's the best move
+                        if (tempScore == 1) //if it is
+                        {
+                            bestMove = new Vector2(i,j); //return the best move
+                            return bestMove;
+                        }
+
+                        int score = MiniMax(board, 1, true, int.MinValue, int.MaxValue); // if it can not block immediatly, check every possibility for this game
+                        board[i, j] = Empty; // delete the temporary token
+
+                        if (score > bestScore) //Keep the best place into the bestscore ---- if the score is equal, keep the first position
+                        {
+                            bestScore = score;
+                            bestMove = new Vector2(i,j);
+                        }
+                    }
+                }
+            }
+            return bestMove;
+        }
+    
     }
 }
