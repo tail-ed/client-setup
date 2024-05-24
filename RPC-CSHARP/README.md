@@ -33,3 +33,5 @@ This program acts as a client socket to connect to a TicTacToe game server. Unli
 - Actions determined by your code are sent using **`RPCSendMessage()`**, which converts the message to JSON and sends it through the **`Send()`** function.
 
 Feel free to adapt the system to your preferences if you find a more efficient method.
+
+## MAKE SURE TO INSTALL .NET SDK 8.0!
