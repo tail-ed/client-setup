@@ -58,11 +58,6 @@ namespace Tailed.ProgrammerGames.TicTacToe
                         //KEEP THE REMAINING MESSAGES, IF THERE IS ONE
                         responseBuilder = new StringBuilder(messages[^1]);
                     }
-                    else 
-                    {
-                        throw new Exception("Server closed the connection.");
-                    }
-                    
                 }
                 catch(Exception e)
                 {
@@ -206,16 +201,18 @@ namespace Tailed.ProgrammerGames.TicTacToe
             //ACTION LOGIC HERE
             //EXEMPLE : PICK A RANDOM AVAILABLE SPOT
             int x, y;
+
             do
             {
                 x = random.Next(0, 3);
                 y = random.Next(0, 3);
             }
             while(gameBoard[x,y] != 0);
-
+            
             //SEND ACTION HERE
             ClientRPC.RPCSendMessage("PutToken", new { x, y});
             //
         }
+
     }
 }
