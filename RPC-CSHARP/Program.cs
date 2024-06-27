@@ -15,6 +15,8 @@ namespace Tailed.ProgrammerGames.TicTacToe
         private static NetworkStream? stream;
         private static IGameManager gameManager = new GameManager();
 
+        private static readonly string UUID = "a51f645d-b76a-4ac9-b8da-46fea2b31eaf"; //****************************************
+
         public static async Task ConnectToServerAsync(string hostname, int port)
         {
             try
@@ -80,6 +82,10 @@ namespace Tailed.ProgrammerGames.TicTacToe
                 switch(method)
                 {
                     //IMPLEMENT METHODS HERE
+                    case "Login":
+                        Console.WriteLine($"[Login]\n{args}\n");
+                        RPCSendMessage("Login", new {UUID});
+                        break;
                     case "Event":
                         if(message.Args["MethodName"] == "ServerClosing")
                         {
@@ -155,6 +161,7 @@ namespace Tailed.ProgrammerGames.TicTacToe
         public static async Task Main(string[] args)
         {
             //CONNECTION TO SERVER 
+            //await ConnectToServerAsync("148.113.158.63",25001);
             await ConnectToServerAsync("localhost",25001);
             
             //FOR COMMANDS LIST, TYPE :
