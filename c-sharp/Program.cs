@@ -15,13 +15,12 @@ namespace Tailed.ProgrammerGames.TicTacToe
         private static NetworkStream? stream;
         private static IGameManager gameManager = new GameManager();
 
-        private static readonly string UUID = "a51f645d-b76a-4ac9-b8da-46fea2b31eaf"; //****************************************
+        private static string UUID = ""; //****************************************
 
         public static async Task ConnectToServerAsync(string hostname, int port)
         {
             try
             {
-                Console.WriteLine("Launching...");
                 client = new TcpClient();
                 await client.ConnectAsync(hostname, port);
                 stream = client.GetStream();
@@ -160,6 +159,18 @@ namespace Tailed.ProgrammerGames.TicTacToe
 
         public static async Task Main(string[] args)
         {
+            if(args.Length > 0)
+            {
+                string uuid = args[0];
+                UUID = uuid;
+                Console.WriteLine("Launching with UUID : " + uuid + "...");
+            }
+            else
+            {
+                Console.WriteLine("No UUID provided, closing...");
+                Environment.Exit(1);
+            }
+
             //CONNECTION TO SERVER 
             //await ConnectToServerAsync("148.113.158.63",25001);
             await ConnectToServerAsync("localhost",25001);
