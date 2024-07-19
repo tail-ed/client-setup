@@ -173,8 +173,9 @@ namespace Tailed.ProgrammerGames.TicTacToe
 
             //CONNECTION TO SERVER 
             //await ConnectToServerAsync("148.113.158.63",25001);
-            await ConnectToServerAsync("localhost",25001);
-            
+            await ConnectToServerAsync("socket.tictactoe.qa.tailed.ca",25001);
+            //await ConnectToServerAsync("localhost",25001);
+    
             //FOR COMMANDS LIST, TYPE :
             //RPCSendMessage("Help");
             
@@ -229,8 +230,8 @@ namespace Tailed.ProgrammerGames.TicTacToe
             
             //SEND ACTION HERE
             ClientRPC.RPCSendMessage("PutToken", new { x, y});
+            Console.WriteLine("Sending PutToken");
             //
         }
-
     }
 }
