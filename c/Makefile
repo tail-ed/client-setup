@@ -20,10 +20,13 @@ clean:
 	rm $(BINDIR)/*.o
 	rm $(EXEC)
 
-$(EXEC): $(OBJFILES)
+$(EXEC): $(OBJFILES) $(BINDIR)
 	$(CC) $(CCFLAGS) $(OBJFILES) -o $(EXEC)
 
-$(BINDIR)/%.o: $(SRCDIR)/%.c
+$(BINDIR)/%.o: $(SRCDIR)/%.c $(BINDIR)
 	$(CC) $(CCFLAGS) -c $< -o $@
+
+$(BINDIR):
+	mkdir $@
 
 .phony: all release debug clean
