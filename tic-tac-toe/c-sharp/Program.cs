@@ -171,10 +171,8 @@ namespace Tailed.ProgrammerGames.TicTacToe
                 Environment.Exit(1);
             }
 
-            //CONNECTION TO SERVER 
-            //await ConnectToServerAsync("148.113.158.63",25001);
-            await ConnectToServerAsync("socket.tictactoe.qa.tailed.ca",25001);
-            //await ConnectToServerAsync("localhost",25001);
+            //CONNECTION TO SERVER
+            await ConnectToServerAsync("socket.tictactoe.tailed.ca",25001);
     
             //FOR COMMANDS LIST, TYPE :
             //RPCSendMessage("Help");
@@ -220,7 +218,7 @@ namespace Tailed.ProgrammerGames.TicTacToe
             //ACTION LOGIC HERE
             //EXEMPLE : PICK A RANDOM AVAILABLE SPOT
             int x, y;
-
+            
             do
             {
                 x = random.Next(0, 3);
