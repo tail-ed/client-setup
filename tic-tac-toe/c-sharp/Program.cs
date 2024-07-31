@@ -172,7 +172,7 @@ namespace Tailed.ProgrammerGames.TicTacToe
             }
 
             //CONNECTION TO SERVER
-            await ConnectToServerAsync("socket.tictactoe.tailed.ca",25001);
+            await ConnectToServerAsync("socket.tictactoe.qa.tailed.ca",25001);
     
             //FOR COMMANDS LIST, TYPE :
             //RPCSendMessage("Help");
