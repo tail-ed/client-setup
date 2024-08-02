@@ -25,7 +25,7 @@ class Program
         try
         {
             Console.WriteLine("Attempting to connect");
-            var connectReq = new ConnectRequest { ClientId = "Felix2" };
+            var connectReq = new ConnectRequest { ClientId = "username" };
             var connectResponse = client.Connect(connectReq);
             Console.WriteLine($"Connection Message: '{connectResponse.Message}'");
 
