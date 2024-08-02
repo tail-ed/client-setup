@@ -472,6 +472,36 @@ namespace Tailed.ProgrammerGames.Connect4
         IDLE
     }
 
+    public class PlayerState
+    {
+        public int MaxBombCount { get; set; }
+        public int BombCount { get; set; }
+        public int ExplosionRadius { get; set; }
+
+        public PlayerState(int maxBombCount = 1, int bombCount = 1, int explosionRadius = 2)
+        {
+            MaxBombCount = maxBombCount;
+            BombCount = bombCount;
+            ExplosionRadius = explosionRadius;
+        }
+    }
+
+    public class Bomb
+    {
+        public int PlayerIdentifier { get; set; }
+        public int ExplosionRadius { get; set; }
+        public int X { get; set; }
+        public int Y { get; set; }
+
+        public Bomb(int playerIdentifier, int explosionRadius, int x, int y)
+        {
+            PlayerIdentifier = playerIdentifier;
+            ExplosionRadius = explosionRadius;
+            X = x;
+            Y = y;
+        }
+    }
+
     public class GameManager : IGameManager
     {
         // 0 free
@@ -480,12 +510,14 @@ namespace Tailed.ProgrammerGames.Connect4
         // 3 bomb
         // x player
         private static CancellationTokenSource? gameTaskCancellationTokenSource;
-        private static int[,] gameBoard = new int[6, 7]; // bomberman grid
+        private static int[,] gameBoard;
 
         // Dictionary to track player positions
         private static Dictionary<int, (int x, int y)> playerPositions = new();
-        private static Dictionary<int, (int x, int y)> bombPositions = new(); // To track where bombs are placed
+        private static List<Bomb> bombPositions = new(); // To track where bombs are placed
+        private static Bomb waitToPlantBomb = null;
         private static Dictionary<int, (int x, int y)> safePositions = new(); // To track where safe positions are
+        private static Dictionary<int, PlayerState> playerStates = new();
 
         public static int playerIdentifier;
 
@@ -520,6 +552,18 @@ namespace Tailed.ProgrammerGames.Connect4
                     {
                         HandleBombExploded(args);
                     }
+                    else if (args.MethodName != null && args.MethodName == "PlayerDied")
+                    {
+                        HandlePlayerDied(args);
+                    }
+                    else if (args.MethodName != null && args.MethodName == "BonusSpawned")
+                    {
+                        HandleBonusSpawned(args);
+                    }
+                    else if (args.MethodName != null && args.MethodName == "CollectBonus")
+                    {
+                        HandleCollectBonus(args);
+                    }
                     break;
                 default:
                     Console.WriteLine($"Unhandled message type : {method}");
@@ -538,18 +582,20 @@ namespace Tailed.ProgrammerGames.Connect4
             string jsonPlayer = args.Player;
             playerIdentifier = JsonConvert.DeserializeObject<int>(jsonPlayer);
 
-            string jsonX = args.X;
-            var x = JsonConvert.DeserializeObject<int>(jsonX);
-
-            string jsonY = args.Y;
-            var y = JsonConvert.DeserializeObject<int>(jsonY);
+            string jsonPlayers = args.Players;
+            var players = JsonConvert.DeserializeObject<List<(int,int,int)>>(jsonPlayers);
 
             // Print out the game board state for debugging
             PrintGameBoard(gameBoard);
 
-            // Initialize player positions
-            playerPositions[playerIdentifier] = (x, y);
+            foreach (var (player, x, y) in players) 
+            {
+                // Initialize player positions
+                playerPositions[player] = (x, y);
 
+                playerStates[player] = new PlayerState();
+            }
+            
             // Start the periodic task to handle bot actions
             StartBotTasks();
         }
@@ -573,6 +619,7 @@ namespace Tailed.ProgrammerGames.Connect4
                         switch (botState)
                         {
                             case BotState.MOVE_TO_SOFT_WALL:
+                                await Task.Delay(1500, token);
                                 if (TryMoveToSoftWall(out var softWallPosition))
                                 {
                                     // Move to soft wall
@@ -583,17 +630,22 @@ namespace Tailed.ProgrammerGames.Connect4
                                     // Store bomb position
                                     var playerPosition = playerPositions[playerIdentifier];
                                     
-                                    if (softWallPosition.x == playerPosition.x &&softWallPosition.y == playerPosition.y) 
+                                    if (softWallPosition.x == playerPosition.x && softWallPosition.y == playerPosition.y) 
                                     {
                                         ClientRPC.RPCSendMessage("PlaceBomb");
                                         // gameBoard[bombPosition.x, bombPosition.y] += 3;
-                                        Console.WriteLine($"Placing Bomb: ({bombPosition.x}, {bombPosition.y})");
+                                        Console.WriteLine($"Placing Bomb: ({playerPosition.x}, {playerPosition.y})");
+                                        // bombPositions.Add(new Bomb(playerIdentifier, playerStates[playerIdentifier].ExplosionRadius, playerPosition.x, playerPosition.y));
                                         botState = BotState.MOVE_TO_SAFE_LOCATION;
                                     }
                                     else {
-                                        bombPositions[playerIdentifier] = softWallPosition;
+                                        waitToPlantBomb = new Bomb(playerIdentifier, playerStates[playerIdentifier].ExplosionRadius, softWallPosition.x, softWallPosition.y);
                                         botState = BotState.PLACE_BOMB;
                                     }
+                                }
+                                else 
+                                {
+                                    PrintGameBoard(gameBoard);
                                 }
                                 break;
 
@@ -610,6 +662,10 @@ namespace Tailed.ProgrammerGames.Connect4
                                     botState = BotState.IDLE; // Or continue the logic as needed
                                     safePositions[playerIdentifier] = safePosition;
                                 }
+                                else 
+                                {
+                                    PrintGameBoard(gameBoard);
+                                }
                                 break;
 
                             case BotState.IDLE:
@@ -618,7 +674,7 @@ namespace Tailed.ProgrammerGames.Connect4
                         }
 
                         // Wait for a specified period before next action
-                        await Task.Delay(1000, token);
+                        await Task.Delay(200, token);
                     }
                     catch (TaskCanceledException)
                     {
@@ -632,16 +688,18 @@ namespace Tailed.ProgrammerGames.Connect4
         private static void MoveToPosition((int x, int y) targetPosition)
         {
             var botPosition = playerPositions[playerIdentifier];
+            Console.WriteLine($"Start MoveToPosition from {botPosition} to {targetPosition}");
             var path = GetPathTo(botPosition, targetPosition);
 
+            Console.WriteLine($"Move in {path.Count} positions");
             // Send each move command to the server
             foreach (var (x, y, direction) in path)
             {
-                ClientRPC.RPCSendMessage("Move", new { Direction = direction });
                 Console.WriteLine($"Moving {direction} to position: ({x}, {y})");
+                ClientRPC.RPCSendMessage("Move", new { Direction = direction });
             }
         }
-
+        
         private static List<(int x, int y)> FindAllSoftWalls(int[,] board, (int x, int y) botPosition)
         {
             List<(int x, int y)> softWalls = new();
@@ -649,25 +707,37 @@ namespace Tailed.ProgrammerGames.Connect4
             // Directions: up, down, left, right
             var directions = new (int dx, int dy)[]
             {
-                (0, 1), // Up
+                (0, 1),  // Up
                 (0, -1), // Down
                 (-1, 0), // Left
-                (1, 0)  // Right
+                (1, 0)   // Right
             };
 
+            // Queue for BFS
+            var queue = new Queue<((int x, int y) position, (int x, int y) direction)>();
+            var visited = new HashSet<(int x, int y)>();
+
+            // Enqueue all initial positions with their directions
             foreach (var (dx, dy) in directions)
             {
-                int x = botPosition.x;
-                int y = botPosition.y;
-                
-                int previousX = x;
-                int previousY = y;
+                queue.Enqueue((botPosition, (dx, dy)));
+                visited.Add(botPosition);
+            }
+
+            while (queue.Count > 0)
+            {
+                var (current, (dx, dy)) = queue.Dequeue();
+                var (currentX, currentY) = current;
+
+                int x = currentX;
+                int y = currentY;
 
                 // Move in the current direction until hitting a block or boundary
                 while (true)
                 {
-                    previousX = x;
-                    previousY = y;
+                    int previousX = x;
+                    int previousY = y;
+
                     x += dx;
                     y += dy;
 
@@ -678,6 +748,7 @@ namespace Tailed.ProgrammerGames.Connect4
                     // Check if the current cell is a soft wall
                     if (board[x, y] == 2)
                     {
+                        // Add the soft wall to the list
                         softWalls.Add((previousX, previousY));
                         break; // Stop checking this direction after finding the first soft wall
                     }
@@ -686,9 +757,18 @@ namespace Tailed.ProgrammerGames.Connect4
                     {
                         break;
                     }
+
+                    // Continue moving in the current direction
+                    if (!visited.Contains((x, y)))
+                    {
+                        visited.Add((x, y));
+                        foreach (var (alldx, alldy) in directions)
+                        {
+                            queue.Enqueue(((x,y), (alldx, alldy)));
+                        }
+                    }
                 }
             }
-
             return softWalls;
         }
 
@@ -696,6 +776,7 @@ namespace Tailed.ProgrammerGames.Connect4
         {
             Console.WriteLine($"Try Move to Soft Wall");
             var botPosition = playerPositions[playerIdentifier];
+            
             var softWalls = FindAllSoftWalls(gameBoard, botPosition);
 
             // Move to the closest soft wall
@@ -717,6 +798,7 @@ namespace Tailed.ProgrammerGames.Connect4
         // Method to get the path from the current position to the target position
         private static List<(int x, int y, string direction)> GetPathTo((int x, int y) start, (int x, int y) end)
         {
+            // Console.WriteLine($"Start GetPathTo {start} {end}");
             var path = new List<(int x, int y, string direction)>();
 
             // Directions for movement
@@ -754,6 +836,8 @@ namespace Tailed.ProgrammerGames.Connect4
                     var newY = cy + dy;
                     var newPos = (newX, newY);
 
+                    // Console.WriteLine($"[GetPathTo] isValid Move : {newX} {newY} {IsValidMove(gameBoard, newX, newY)}");
+
                     if (IsValidMove(gameBoard, newX, newY) && !visited.Contains(newPos))
                     {
                         var newPath = new List<(int x, int y, string direction)>(currentPath)
@@ -767,6 +851,8 @@ namespace Tailed.ProgrammerGames.Connect4
                 }
             }
 
+            // Console.WriteLine($"[GetPathTo] Go to location in {path.Count} moves");
+
             return path;
         }
 
@@ -774,31 +860,49 @@ namespace Tailed.ProgrammerGames.Connect4
         {
             var botPosition = playerPositions[playerIdentifier];
             Console.WriteLine($"Try Move to Safe Location from {botPosition.x} {botPosition.y}");
-            var safeLocations = new List<(int x, int y)>();
 
-            // Find all safe locations away from the bomb's effect range
-            for (int x = botPosition.x - 2; x <= botPosition.x + 2; x++)
+            // Directions for movement
+            var directions = new (int dx, int dy)[]
             {
-                for (int y = botPosition.y - 2; y <= botPosition.y + 2; y++)
+                (0, 1),
+                (0, -1),
+                (-1, 0),
+                (1, 0)
+            };
+
+            // Queue for BFS
+            var queue = new Queue<(int x, int y)>();
+            var visited = new HashSet<(int x, int y)>();
+
+            // Enqueue start position
+            queue.Enqueue(botPosition);
+            visited.Add(botPosition);
+
+            while (queue.Count > 0)
+            {
+                var (currentX, currentY) = queue.Dequeue();
+
+                // Check if the current position is a valid and safe location
+                if (IsValidMove(gameBoard, currentX, currentY) && !IsDangerZone(gameBoard, currentX, currentY))
                 {
-                    if (IsValidMove(gameBoard, x, y) && !IsDangerZone(gameBoard, x, y))
+                    safePosition = (currentX, currentY);
+                    Console.WriteLine($"Picked Safe Location : {safePosition}");
+                    return true;
+                }
+
+                // Enqueue valid neighboring positions
+                foreach (var (dx, dy) in directions)
+                {
+                    var newX = currentX + dx;
+                    var newY = currentY + dy;
+                    var newPos = (newX, newY);
+
+                    if (IsValidMove(gameBoard, newX, newY) && !visited.Contains(newPos))
                     {
-                        Console.WriteLine($"{x} {y} is Safe and Valid");
-                        safeLocations.Add((x, y));
+                        queue.Enqueue(newPos);
+                        visited.Add(newPos);
                     }
                 }
-            }
-
-            // Move to the closest safe location
-            if (safeLocations.Count > 0)
-            {
-                Console.WriteLine($"{safeLocations.Count}");
-                // Find the closest safe location
-                safePosition = safeLocations
-                    .OrderBy(p => Math.Abs(p.x - botPosition.x) + Math.Abs(p.y - botPosition.y))
-                    .First();
-
-                return true;
             }
 
             // No safe location found
@@ -808,21 +912,21 @@ namespace Tailed.ProgrammerGames.Connect4
 
         private static bool IsDangerZone(int[,] board, int x, int y)
         {
+            Console.WriteLine($"IsDangerZone BombCount {bombPositions.Count} ");
             // Iterate over the entire board to find bombs
-            for (int bombX = 0; bombX < board.GetLength(0); bombX++)
+            foreach (Bomb bomb in bombPositions)
             {
-                for (int bombY = 0; bombY < board.GetLength(1); bombY++)
+                int bombX = bomb.X;
+                int bombY = bomb.Y;
+                
+                Console.WriteLine($"bomb at position {bombX} {bombY} ");
+
+                // Check if the position (x, y) is within the explosion radius of the bomb
+                // Console.WriteLine($"IsDangerZone For {x} {y} Bomb is on position {bombX} {bombY} Condition - {Math.Abs(bombY - y)} {Math.Abs(bombX - x)}");
+                if ((bombX == x && Math.Abs(bombY - y) <= bomb.ExplosionRadius) || 
+                    (bombY == y && Math.Abs(bombX - x) <= bomb.ExplosionRadius))
                 {
-                    if (board[bombX, bombY] % 100 == 3)
-                    {
-                        // Check if the position (x, y) is within the explosion radius of the bomb
-                        Console.WriteLine($"IsDangerZone For {x} {y} Bomb is on position {bombX} {bombY} Condition - {Math.Abs(bombY - y)} {Math.Abs(bombX - x)}");
-                        if ((bombX == x && Math.Abs(bombY - y) <= ExplosionRadius) || 
-                            (bombY == y && Math.Abs(bombX - x) <= ExplosionRadius))
-                        {
-                            return true; // Position is in a danger zone
-                        }
-                    }
+                    return true; // Position is in a danger zone
                 }
             }
 
@@ -872,14 +976,13 @@ namespace Tailed.ProgrammerGames.Connect4
                     // If playerId is equal to player identifier and location is equal to placebomb location then call ClientRPC.RPCSendMessage("PlaceBomb");
                     if (playerId == playerIdentifier)
                     {
-                        var isBombValuePresent = bombPositions.TryGetValue(playerId, out var bombPosition);
-                        Console.WriteLine($"Check State {botState} {position} {bombPosition} {position.x == bombPosition.x} {position.y == bombPosition.y}");
-                        if (botState == BotState.PLACE_BOMB && isBombValuePresent && position.x == bombPosition.x && position.y == bombPosition.y)
+                        // Console.WriteLine($"Check State {botState} {position} {bombPosition} {position.x == bombPosition.x} {position.y == bombPosition.y}");
+                        if (botState == BotState.PLACE_BOMB && waitToPlantBomb != null && position.x == waitToPlantBomb.X && position.y == waitToPlantBomb.Y)
                         {
                             ClientRPC.RPCSendMessage("PlaceBomb");
                             // gameBoard[bombPosition.x, bombPosition.y] += 3;
-                            Console.WriteLine($"Placing Bomb: ({bombPosition.x}, {bombPosition.y})");
-                            botState = BotState.MOVE_TO_SAFE_LOCATION;
+                            Console.WriteLine($"Placing Bomb: ({waitToPlantBomb.X}, {waitToPlantBomb.Y})");
+                            // bombPositions.Add(new Bomb(playerIdentifier, playerStates[playerIdentifier].ExplosionRadius, position.x, position.y));
                         }
                         // else if (botState == BotState.IDLE && safePositions.TryGetValue(playerId, out var safePosition) && position.x == safePosition.x && position.y == safePosition.y) {
                         //     botState = BotState.MOVE_TO_SOFT_WALL;
@@ -896,6 +999,7 @@ namespace Tailed.ProgrammerGames.Connect4
 
             // Extract player ID and direction
             int playerId = args.Player;
+            int radius = args.Radius;
 
             // Update player position
             if (playerPositions.ContainsKey(playerId))
@@ -904,6 +1008,11 @@ namespace Tailed.ProgrammerGames.Connect4
                 var x = playerPosition.x;
                 var y = playerPosition.y;
                 gameBoard[x, y] += 3;
+                bombPositions.Add(new Bomb(playerId, playerStates[playerId].ExplosionRadius, x, y));
+                if (playerId == playerIdentifier) 
+                {
+                    botState = BotState.MOVE_TO_SAFE_LOCATION;
+                }
             }
         }
 
@@ -918,6 +1027,15 @@ namespace Tailed.ProgrammerGames.Connect4
             
             // Deserialize the affected coordinates
             var affectedCoordinates = JsonConvert.DeserializeObject<List<(int x, int y)>>(jsonAffectedCoordinates);
+            
+            string jsonOwner = args.Owner;
+            var bombOwner = JsonConvert.DeserializeObject<int>(jsonOwner);
+
+            string jsonX = args.X;
+            var bombX = JsonConvert.DeserializeObject<int>(jsonX);
+            
+            string jsonY = args.Y;
+            var bombY = JsonConvert.DeserializeObject<int>(jsonY);
 
             // Reset the game board at the affected coordinates
             foreach (var (x, y) in affectedCoordinates)
@@ -925,13 +1043,94 @@ namespace Tailed.ProgrammerGames.Connect4
                 if (x >= 0 && x < gameBoard.GetLength(0) && y >= 0 && y < gameBoard.GetLength(1))
                 {
                     gameBoard[x, y] = 0;
-                    Console.WriteLine($"Resetting board position: ({x}, {y}) to 0");
+                    // Console.WriteLine($"Resetting board position: ({x}, {y}) to 0");
                 }
             }
 
-            // Set the bot state after handling the explosion
-            if (playerIdentifier )
-            botState = BotState.MOVE_TO_SOFT_WALL;
+            playerStates[bombOwner].BombCount = Math.Min(playerStates[bombOwner].BombCount + 1, playerStates[bombOwner].MaxBombCount);
+
+            RemoveBomb(bombOwner);
+
+            if (playerIdentifier == bombOwner) 
+            {
+                botState = BotState.MOVE_TO_SOFT_WALL;
+            }
+        }
+
+        private static void RemoveBomb(int bombOwner)
+        {
+            var bombToRemove = bombPositions
+                .FirstOrDefault(b => b.PlayerIdentifier == bombOwner);
+
+            if (bombToRemove != null)
+            {
+                bombPositions.Remove(bombToRemove);
+                Console.WriteLine($"Removed bomb position for owner: {bombOwner}");
+            }
+        }
+        private static void HandleCollectBonus(dynamic args)
+        {
+            int playerId = JsonConvert.DeserializeObject<int>(args.Player.ToString());
+            int bonusType = JsonConvert.DeserializeObject<int>(args.Bonus.ToString());
+            int x = JsonConvert.DeserializeObject<int>(args.X.ToString());
+            int y = JsonConvert.DeserializeObject<int>(args.Y.ToString());
+
+            gameBoard[x, y] -= bonusType;
+
+            var playerState = playerStates[playerId];
+            // public int MaxBombCount { get; set; }
+            // public int BombCount { get; set; }
+            // public int ExplosionRadius { get; set; }
+
+            Console.WriteLine($"Player {playerId} collected bonus {bonusType} at {x} {y}");
+
+            switch (bonusType)
+            {
+                case 10:
+                    playerState.ExplosionRadius = Math.Min(playerState.ExplosionRadius + 1, 4); // Cap at 4
+                    break;
+                case 11:
+                    playerState.ExplosionRadius = 4; // Set to max 4
+                    break;
+                case 12:
+                    playerState.ExplosionRadius = Math.Max(playerState.ExplosionRadius - 1, 1); // Cap at 1
+                    break;
+                case 13:
+                    playerState.MaxBombCount = Math.Min(playerState.MaxBombCount + 1, 3); // Cap at 3
+                    playerState.BombCount += 1;
+                    break;
+                case 14:
+                    playerState.MaxBombCount = Math.Max(playerState.MaxBombCount - 1, 1); // Cap at 1
+                    break;
+                // Handle other collected bonuses as needed
+            }
+
+            playerState.BombCount = Math.Min(playerState.BombCount, playerState.MaxBombCount);
+        }
+
+        private static void HandleBonusSpawned(dynamic args)
+        {
+            int bonusType = JsonConvert.DeserializeObject<int>(args.Bonus.ToString());
+
+            int x = JsonConvert.DeserializeObject<int>(args.X.ToString());
+            int y = JsonConvert.DeserializeObject<int>(args.Y.ToString());
+
+            Console.WriteLine($"Bonus Spawned at {x} {y}");
+
+            gameBoard[x, y] = bonusType;
+        }
+
+        private static void HandlePlayerDied(dynamic args)
+        {
+            int playerId = JsonConvert.DeserializeObject<int>(args.Player.ToString());
+            int x = JsonConvert.DeserializeObject<int>(args.X.ToString());
+            int y = JsonConvert.DeserializeObject<int>(args.Y.ToString());
+
+            gameBoard[x, y] -= playerId;
+            
+            Console.WriteLine($"Player {playerId} died at {x} {y}");
+
+            playerPositions.Remove(playerId);
         }
 
         private static string GetBestMove(int[,] board)
@@ -972,8 +1171,17 @@ namespace Tailed.ProgrammerGames.Connect4
 
         private static bool IsValidMove(int[,] board, int x, int y)
         {
-            // Ensure coordinates are within bounds and space is free
-            return x >= 0 && x < board.GetLength(0) && y >= 0 && y < board.GetLength(1) && board[x, y] == 0;
+            // Check if coordinates are outside of board boundaries
+            if (x < 0 || x >= board.GetLength(0) || y < 0 || y >= board.GetLength(1))
+            {
+                return false;
+            }
+
+            // Get the board value at the given coordinates
+            int boardValue = board[x, y];
+
+            // Ensure space is free (value is 0) or within valid range for movement
+            return boardValue == 0 || (boardValue >= 10 && boardValue < 100);
         }
 
         private static void PrintGameBoard(int[,] board)
