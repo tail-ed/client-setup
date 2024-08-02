@@ -1,4 +1,5 @@
-How to use gRPC to play TicTacToe
+#How to use gRPC to play TicTacToe
+
 Ensure you have the protobuf compiler https://github.com/protocolbuffers/protobuf/releases and add it to your PATH.
 
 Find a plugin for your desired language and add it to your PATH.
