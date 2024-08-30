@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package TTTGames;
+
+service TTTGameService {
+  rpc Connect(ConnectRequest) returns (ConnectResponse);
+  rpc PutToken(PutTokenRequest) returns (PutTokenResponse);
+  rpc PlayerTurn(PlayerTurnRequest) returns (stream PlayerTurnResponse);
+  rpc Help(HelpRequest) returns (HelpResponse);
+  rpc Event(EmptyRequest) returns (stream EventMessage);
+}
+
+message HelpRequest{}
+
+message PlayerTurnRequest{}
+
+message EmptyRequest{}
+
+message ConnectRequest{
+  string ClientId = 1;
+}
+
+message ConnectResponse{
+  string message =1;
+  bool connected = 2;
+}
+
+message HelpResponse{
+  string help = 1;
+}
+
+message PutTokenRequest {
+  int32 X = 1;
+  int32 Y = 2;
+}
+
+message PutTokenResponse{}
+
+message PlayerTurnResponse{
+  repeated Coordinates Board = 1;
+}
+
+message Coordinates{
+  int32 X = 1;
+  int32 Y = 2;
+  int32 Value = 3;
+}
+
+message EventMessage{
+  string message = 1;
+}
